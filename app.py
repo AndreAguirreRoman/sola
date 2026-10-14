@@ -94,7 +94,7 @@ class Claude:
         self.input_tokens = 0
         self.output_tokens = 0
 
-    def ask(self, system: str, user: str, max_tokens: int = 1024) -> str:
+    def ask(self, system: str, user: str, max_tokens: int = 4096) -> str:
         response = self.client.messages.create(
             model=self.model,
             max_tokens=max_tokens,
@@ -103,6 +103,9 @@ class Claude:
         )
         self.input_tokens += response.usage.input_tokens
         self.output_tokens += response.usage.output_tokens
+        if response.stop_reason == "max_tokens":
+            raise RuntimeError(f"Claude's reply was cut off at the {max_tokens}-token limit "
+                               "(the query was too long). Try a simpler question.")
         return "\n".join(b.text for b in response.content if b.type == "text").strip()
 
     def cost(self) -> float | None:
@@ -161,7 +164,10 @@ def ask_database(claude: Claude, question: str, strategy: str = "zero-shot",
         except sqlite3.Error as exc:  # give Claude one chance to fix its query
             retried = str(exc)
             sql = generate_sql(claude, schema, question, strategy, error=str(exc), bad_sql=sql)
-            cursor = connection.execute(sql)
+            try:
+                cursor = connection.execute(sql)
+            except sqlite3.Error as exc2:
+                raise RuntimeError(f"SQL failed twice ({exc2}). Last query:\n{sql}") from None
         columns = [c[0] for c in cursor.description]
         rows = cursor.fetchall()
     answer = friendly_answer(claude, question, sql, columns, rows) if with_answer else None
@@ -212,7 +218,10 @@ def main() -> None:
     claude = Claude(os.getenv("ANTHROPIC_MODEL", DEFAULT_MODEL))
 
     if args.question:
-        run_question(claude, args.question, args.strategy)
+        try:
+            run_question(claude, args.question, args.strategy)
+        except Exception as exc:
+            raise SystemExit(f"Error: {exc}\n[{claude.model} | total so far: {claude.usage_line()}]")
         return
 
     print("Ask about BYU students, classes, grades, housing, or CougarCash. Type 'quit' to exit.")
