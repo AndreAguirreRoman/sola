@@ -8,7 +8,7 @@ question ──► Claude writes SQL ──► SQLite runs it (read-only) ──
 
 ## Schema
 
-![Schema](schema.png)
+![Schema](schema2.png)
 
 10 tables, all with fictional data (`schema.sql` holds the tables, `data.sql` the rows):
 
