@@ -81,7 +81,7 @@ This question needs several calculations in one query: current-semester credits,
 
 `evaluate.py` runs 10 test questions through each strategy and grades the SQL automatically against a hand-written correct query. The full SQL for every run is in [strategy_results.md](strategy_results.md).
 
-## What we learned
+## What I learned
 
 - **How good is it at SQL?** Very good at the mechanics: joins across 5 tables, `NOT EXISTS`, `HAVING`, `CASE`, CTEs, and `UNION ALL` all came out right the first time. It was even careful about row multiplication on the hardest question.
 - **Limitations:** The mistakes weren't syntax errors. They came from *understanding* the question:
