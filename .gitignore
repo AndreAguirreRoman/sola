@@ -1,6 +1,12 @@
 .venv/
 __pycache__/
 *.py[cod]
-.env
-data/*.db
 .DS_Store
+
+# NEVER commit your API key
+.env
+
+# keep data/byu.db (the assignment asks for the DB); ignore everything else in data/
+data/*
+!data/byu.db
+*.db-journal
