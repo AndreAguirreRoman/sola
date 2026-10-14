@@ -1,14 +1,8 @@
-# BYU Student Records: ask a database questions in plain English
-
-**Purpose:** A fictional BYU student records database (students, classes, grades, housing, and CougarCash spending at campus stores) that you can query in plain English. Claude turns your question into SQL, runs it on SQLite, and explains the result in plain English.
-
-```
-question ──► Claude writes SQL ──► SQLite runs it (read-only) ──► rows ──► Claude ──► plain-English answer
-```
+# BYU Student Records
 
 ## Schema
 
-![Schema](schema2.png)
+![Schema](schema3.png)
 
 10 tables, all with fictional data (`schema.sql` holds the tables, `data.sql` the rows):
 
@@ -27,7 +21,7 @@ question ──► Claude writes SQL ──► SQLite runs it (read-only) ──
 
 GPA and CougarCash balance are deliberately **not stored**, so the model has to calculate them from the tables.
 
-## A question that worked ✅
+## A question that worked 
 
 **Q:** *Who are the top 5 international students by GPA who have no scholarship, are returned missionaries, and have deposited CougarCash? Find the same for the top 5 national students.*
 
@@ -60,33 +54,25 @@ SELECT * FROM (SELECT student_id, first_name, last_name, citizenship, ROUND(gpa,
 
 Verified correct. It needed 5 tables, a credit-weighted GPA, and an `EXISTS` check so deposits didn't multiply the rows. It also said honestly that fewer than 5 students matched instead of loosening a filter.
 
-## A question that did not work ❌
+## A question that did not work 
 
-**Q:** *What classes is Emily Larsen taking right now?*
 
-```sql
-SELECT c.dept_code, c.course_number, c.title, sec.section_number, sec.semester, sec.days, sec.start_time, sec.building
-FROM students s
-JOIN enrollments e ON e.student_id = s.student_id
-JOIN sections sec ON sec.section_id = e.section_id
-JOIN courses c ON c.course_id = sec.course_id
-WHERE s.first_name = 'Emily' AND s.last_name = 'Larsen'
-  AND e.letter_grade IS NULL
+**Q:** *Find active BYU students who are enrolled in at least 5 credits this semester, have a GPA higher than the average GPA for their major, and have spent more than the average in CougarCash. For each student, show their name, major, college, GPA, total credits this semester, total CougarCash spending, and number of courses.*
+
+**Response:** no answer. The app crashed with:
+
+```
+sqlite3.OperationalError: incomplete input
 ```
 
-**Response:**
-> No matching records were found for Emily Larsen. … She may not be enrolled in anything right now, or there may be no student by that name in the records.
+This question needs several calculations in one query: current-semester credits, GPA, each major's average GPA, an average spending amount, and course counts. That adds up to a long query with several CTEs. The app capped Claude's reply at **1,024 output tokens**, so the SQL was cut off partway through. `incomplete input` is SQLite's error for a statement that stops in the middle. The automatic retry hit the same limit and failed the same way.
 
-Emily Larsen is a **professor**. She's teaching MATH 112 and MATH 113 this semester. Because the question said "taking", Claude assumed she was a student and never checked the `professors` table. At least it didn't make anything up.
-
+**What we changed:** we raised the limit to 4,096 tokens, and the app now detects a cut-off reply (`stop_reason == "max_tokens"`) and says so clearly instead of crashing. Even with the fix, this question has a second problem: "more than the average in CougarCash" doesn't say *whose* average (the whole school? their college? their major?), so the model has to guess.
 ## More examples
 
 [EXAMPLES.md](EXAMPLES.md) has 8 real questions with the generated SQL, the response, and a hand-checked verdict for each: 4 fully correct, 3 partly correct, 1 wrong.
 
-## Prompting strategies
-
-We tried all three strategies from [Chang & Fosler-Lussier (2023), *How to Prompt LLMs for Text-to-SQL*](https://arxiv.org/abs/2305.11853) (`prompts.py`):
-
+  
 | Strategy | What the prompt contains |
 |---|---|
 | **Zero-shot** | Our schema (`CREATE TABLE` statements plus 3 sample rows per table, the format the paper recommends) and the question |
@@ -94,16 +80,6 @@ We tried all three strategies from [Chang & Fosler-Lussier (2023), *How to Promp
 | **Cross-domain** | 4 example question → SQL pairs from a *different* database (a campus piano tracking system), then our schema and the question |
 
 `evaluate.py` runs 10 test questions through each strategy and grades the SQL automatically against a hand-written correct query. The full SQL for every run is in [strategy_results.md](strategy_results.md).
-
-<!-- RESULTS: paste the summary table from strategy_results.md here after running `python evaluate.py` -->
-
-| Strategy | Correct | Input tokens | Output tokens | Cost |
-|---|---|---|---|---|
-| zero-shot | _/10 | | | |
-| single-domain | _/10 | | | |
-| cross-domain | _/10 | | | |
-
-**What we noticed:** _(fill in after running)_
 
 ## What we learned
 
@@ -113,26 +89,4 @@ We tried all three strategies from [Chang & Fosler-Lussier (2023), *How to Promp
   - It dropped students with no transactions when working out the lowest balance.
   - It reported a 1-student average as "the lowest" without a caveat.
   - It wrote an answer that was only as complete as the columns the SQL returned.
-- **Cost:** About **1¢ per question** on `claude-sonnet-5-5` ($2 / $10 per million input/output tokens). Most of that is the roughly 3,800-token schema prompt. `claude-haiku-5-5` costs $0.10 / $0.50, roughly 20× cheaper. Running all 8 examples cost about $0.10.
-- **Safety:** The database is opened read-only, and only single `SELECT`/`WITH` statements are allowed. Asking it to "add a student" is refused, because letting an AI write to a database is risky.
 
-## Run it yourself
-
-```bash
-pip install -r requirements.txt
-cp .env.example .env              # add your own Anthropic API key (never commit .env)
-python app.py --init-db           # builds data/byu.db from schema.sql + data.sql
-python app.py "Who spent the most CougarCash at the Creamery?"
-python app.py --strategy single-domain "What is the average GPA by major?"
-python app.py                     # interactive mode
-python evaluate.py                # compare all three strategies
-```
-
-| File | Purpose |
-|---|---|
-| `app.py` | The natural-language interface |
-| `prompts.py` | The three prompting strategies and their examples |
-| `evaluate.py` | Automatic comparison of the strategies |
-| `schema.sql`, `data.sql` | Database design and fictional data (`generate_data.py` regenerates the data) |
-| `data/byu.db` | The built SQLite database |
-| `EXAMPLES.md`, `strategy_results.md` | Results |
