@@ -1,5 +1,9 @@
 # BYU Student Records
 
+This is a small database of BYU students. Their majors, classes, grades, housing, and where they spend their CougarCash at places on campus like the Creamery or a vending machine. 
+
+I know it's missing a lot of things a real student system would have holds, textbooks, roommates. I only added the things I wanted to test the AI. I also assumed a professor can't be a student, even though I know there are cases where they are, like a professor taking a class or a grad student who also teaches.
+
 ## Schema
 
 ![Schema](schema3.png)
